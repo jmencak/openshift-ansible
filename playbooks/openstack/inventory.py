@@ -12,11 +12,12 @@ from __future__ import print_function
 from collections import Mapping
 import json
 import os
+import argparse
 
 import shade
 
 
-def base_openshift_inventory(cluster_hosts):
+def base_openshift_inventory(cluster_hosts, no_app_nodes=False):
     '''Set the base openshift inventory.'''
     inventory = {}
 
@@ -39,7 +40,10 @@ def base_openshift_inventory(cluster_hosts):
     cns = [server.name for server in cluster_hosts
            if server.metadata['host-type'] == 'cns']
 
-    nodes = list(set(masters + infra_hosts + app + cns))
+    if no_app_nodes:
+        nodes = list(set(masters + infra_hosts + cns))
+    else:
+        nodes = list(set(masters + infra_hosts + app + cns))
 
     dns = [server.name for server in cluster_hosts
            if server.metadata['host-type'] == 'dns']
@@ -120,7 +124,7 @@ def _get_hostvars(server, docker_storage_mountpoints):
     return hostvars
 
 
-def build_inventory():
+def build_inventory(no_app_nodes=False):
     '''Build the dynamic inventory.'''
     cloud = shade.openstack_cloud()
 
@@ -130,7 +134,7 @@ def build_inventory():
         server for server in cloud.list_servers()
         if 'metadata' in server and 'clusterid' in server.metadata]
 
-    inventory = base_openshift_inventory(cluster_hosts)
+    inventory = base_openshift_inventory(cluster_hosts, no_app_nodes)
 
     for server in cluster_hosts:
         if 'group' in server.metadata:
@@ -216,4 +220,13 @@ def _get_kuryr_vars(cloud_client, data):
 
 
 if __name__ == '__main__':
-    print(json.dumps(build_inventory(), indent=4, sort_keys=True))
+    parser = argparse.ArgumentParser("%prog [options]")
+    parser.add_argument(
+        "-a", "--no-app-nodes",
+        dest="no_app_nodes",
+        action="store_true",
+        default=False,
+        help="Exclude application nodes from nodes group",
+    )
+    args = parser.parse_args()
+    print(json.dumps(build_inventory(args.no_app_nodes), indent=4, sort_keys=True))
